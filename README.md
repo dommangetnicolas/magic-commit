@@ -4,10 +4,13 @@
 [![Latest release](https://img.shields.io/github/v/release/dommangetnicolas/magic-commit)](https://github.com/dommangetnicolas/magic-commit/releases/latest)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Website](https://img.shields.io/badge/website-magic--commit.nicolas--dmg.fr-6d4aff)](https://magic-commit.nicolas-dmg.fr/)
 
 A macOS menu bar app that keeps an eye on your git projects and commits them with AI-written messages from [opencommit](https://github.com/di-sukharev/opencommit) (`oco`), in one click.
 
 Commit as often as you like with a quick `WIP`, then let Magic Commit turn every WIP commit into a real, descriptive message before you push.
+
+**Website:** [magic-commit.nicolas-dmg.fr](https://magic-commit.nicolas-dmg.fr/)
 
 ## Features
 
