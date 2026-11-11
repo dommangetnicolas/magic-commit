@@ -120,8 +120,12 @@
     .shot:has(img) img, .shot.hero-shot:has(img) img, .shot.small:has(img) img { position: static; height: auto; }
     .shot.small:has(img) { padding: 14px; display: grid; place-items: center; }
     .shot.small:has(img) img { width: auto; max-width: 100%; max-height: 260px; border-radius: 8px; }
+    /* Clip to the alert's own rounded corners, hiding whatever was behind it. */
+    .shot.small:has(img) img.alert { border-radius: 0; clip-path: inset(3px round 22px); filter: drop-shadow(0 8px 20px rgba(0,0,0,.16)); }
     /* The hero is a window capture with its own shadow, so it needs no frame. */
     .shot.hero-shot:has(img) { background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; max-width: 480px; }
+    /* Never enlarge the hero capture beyond its own pixels, which would blur it. */
+    .shot.hero-shot:has(img) img { width: auto; max-width: 100%; margin: 0 auto; }
 
     /* Sections */
     section { padding: 88px 0 0; }
@@ -251,7 +255,7 @@
           <h3><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>Push</h3>
           <p>Runs <code>git push</code>, setting the upstream for new branches, and warns you first if WIP commits are still in there.</p>
           <div class="shot small">
-            <img src="screenshots/push.png" alt="The warning shown when pushing with WIP commits" onerror="this.remove()">
+            <img class="alert" src="screenshots/push.png" alt="The warning shown when pushing with WIP commits" onerror="this.remove()">
             <div class="ph">→ site/screenshots/push.png</div>
           </div>
         </article>
