@@ -1,0 +1,31 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output shown in the panel
+      description: Click **Details** on the result banner and paste the output, if any.
+      render: text
+  - type: input
+    id: app-version
+    attributes:
+      label: Magic Commit version
+      placeholder: "1.0.0"
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "15.1"
+  - type: input
+    id: oco-version
+    attributes:
+      label: opencommit version (`oco --version`)
