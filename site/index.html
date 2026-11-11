@@ -115,6 +115,13 @@
     .shot.hero-shot img { position: absolute; inset: 0; height: 100%; object-fit: cover; object-position: top; }
     .shot.small { aspect-ratio: 16 / 10; }
     .shot.small img { position: absolute; inset: 0; height: 100%; object-fit: cover; object-position: top; }
+    /* Once a real screenshot is in, show it at its own aspect ratio. */
+    .shot:has(img), .shot.hero-shot:has(img), .shot.small:has(img) { aspect-ratio: auto; }
+    .shot:has(img) img, .shot.hero-shot:has(img) img, .shot.small:has(img) img { position: static; height: auto; }
+    .shot.small:has(img) { padding: 14px; display: grid; place-items: center; }
+    .shot.small:has(img) img { width: auto; max-width: 100%; max-height: 260px; border-radius: 8px; }
+    /* The hero is a window capture with its own shadow, so it needs no frame. */
+    .shot.hero-shot:has(img) { background: none; border: 0; box-shadow: none; border-radius: 0; overflow: visible; max-width: 480px; }
 
     /* Sections */
     section { padding: 88px 0 0; }
