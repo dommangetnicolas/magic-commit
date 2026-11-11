@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Magic Commit — AI commit messages from your menu bar</title>
+  <meta name="description" content="A macOS menu bar app that watches your git projects and commits them with AI-written messages from opencommit, in one click.">
+  <meta property="og:title" content="Magic Commit">
+  <meta property="og:description" content="Commit as often as you like with a quick WIP, then let Magic Commit turn every WIP commit into a real message before you push.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://dommangetnicolas.github.io/magic-commit/screenshots/panel.png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #fbfaf8;
+      --surface: #ffffff;
+      --surface-2: #f2f0ec;
+      --text: #1c1b1a;
+      --muted: #6b6762;
+      --border: #e4e0da;
+      --accent: #6d4aff;
+      --accent-2: #b14aff;
+      --accent-text: #ffffff;
+      --code-bg: #1e1d22;
+      --code-text: #ece9f5;
+      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 40px rgba(40,20,90,.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121116;
+        --surface: #1b1a20;
+        --surface-2: #232229;
+        --text: #f1eff5;
+        --muted: #a09cab;
+        --border: #2e2c35;
+        --accent: #9b82ff;
+        --accent-2: #d08bff;
+        --accent-text: #120f1c;
+        --code-bg: #0c0b0f;
+        --code-text: #ece9f5;
+        --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 40px rgba(0,0,0,.45);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font: 0.88em/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+      background: var(--surface-2);
+      padding: .1em .35em;
+      border-radius: 5px;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+    /* Nav */
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; color: var(--text); }
+    .brand:hover { text-decoration: none; }
+    .brand svg { width: 28px; height: 28px; }
+    nav .links { display: flex; gap: 20px; font-size: 15px; }
+    nav .links a { color: var(--muted); }
+
+    /* Hero */
+    .hero { text-align: center; padding: 56px 0 24px; }
+    .badge {
+      display: inline-block; font-size: 13px; font-weight: 600; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; margin-bottom: 20px;
+      background: var(--surface);
+    }
+    h1 {
+      font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.03em;
+      margin: 0 auto 18px; max-width: 14ch; font-weight: 750;
+    }
+    h1 .grad {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      white-space: nowrap;
+    }
+    .lede { font-size: clamp(17px, 2.2vw, 20px); color: var(--muted); max-width: 40em; margin: 0 auto 32px; }
+    .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 12px;
+      font-weight: 600; font-size: 16px; border: 1px solid var(--border); color: var(--text); background: var(--surface);
+    }
+    .btn:hover { text-decoration: none; transform: translateY(-1px); }
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-text); border-color: transparent;
+    }
+    .btn svg { width: 18px; height: 18px; }
+    .fine { font-size: 14px; color: var(--muted); margin-top: 14px; }
+
+    /* Screenshot frames: the image covers the placeholder; if it's missing, the placeholder shows. */
+    .shot {
+      position: relative; border-radius: 14px; overflow: hidden; background: var(--surface-2);
+      border: 1px solid var(--border); box-shadow: var(--shadow);
+    }
+    .shot img { display: block; width: 100%; height: auto; position: relative; z-index: 1; }
+    .shot .ph {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+      padding: 16px; color: var(--muted); font-size: 14px;
+      background: repeating-linear-gradient(45deg, transparent 0 12px, rgba(127,127,127,.06) 12px 24px);
+    }
+    .shot:has(img) .ph { display: none; }
+    .shot.hero-shot { max-width: 560px; margin: 48px auto 0; aspect-ratio: 4 / 5; }
+    .shot.hero-shot img { position: absolute; inset: 0; height: 100%; object-fit: cover; object-position: top; }
+    .shot.small { aspect-ratio: 16 / 10; }
+    .shot.small img { position: absolute; inset: 0; height: 100%; object-fit: cover; object-position: top; }
+
+    /* Sections */
+    section { padding: 88px 0 0; }
+    h2 { font-size: clamp(28px, 4vw, 38px); letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 12px; }
+    .section-lede { color: var(--muted); max-width: 38em; margin: 0 0 40px; }
+
+    .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px;
+      display: flex; flex-direction: column; gap: 16px; min-width: 0;
+    }
+    .card h3 { margin: 0; font-size: 19px; display: flex; align-items: center; gap: 10px; }
+    .card h3 .ico {
+      width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-text);
+    }
+    .card h3 .ico svg { width: 18px; height: 18px; }
+    .card p { margin: 0; color: var(--muted); font-size: 16px; }
+
+    .steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; list-style: none; padding: 0; margin: 0; }
+    .steps li {
+      counter-increment: s; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px;
+      color: var(--muted); font-size: 16px;
+    }
+    .steps li::before {
+      content: counter(s); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--surface-2); color: var(--text); font-weight: 700; margin-bottom: 12px;
+    }
+    .steps strong { color: var(--text); display: block; margin-bottom: 4px; }
+
+    .install { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .install ol { margin: 0; padding-left: 1.2em; color: var(--muted); }
+    .install li { margin-bottom: 10px; }
+    .install li strong { color: var(--text); }
+    pre {
+      background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 14px 16px; margin: 8px 0 0;
+      overflow-x: auto; font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    pre code { background: none; padding: 0; color: inherit; }
+
+    footer {
+      margin-top: 96px; padding: 28px 0 40px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 14px;
+    }
+    footer a { color: var(--muted); }
+
+    @media (max-width: 760px) {
+      nav .links .hide-sm { display: none; }
+      .hero { padding-top: 32px; }
+      .features, .steps, .install { grid-template-columns: 1fr; }
+      section { padding-top: 64px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="./">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d4aff"/><stop offset="1" stop-color="#b14aff"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><path d="M9 23l10-10M17 11l4 4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M22 6l.8 1.9L24.7 9l-1.9.8L22 11.7l-.8-1.9L19.3 9l1.9-.8zM10 8l.5 1.2 1.2.5-1.2.5L10 11.4l-.5-1.2-1.2-.5 1.2-.5zM24 18l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" fill="#fff"/></svg>
+        Magic Commit
+      </a>
+      <div class="links">
+        <a class="hide-sm" href="#features">Features</a>
+        <a class="hide-sm" href="#install">Install</a>
+        <a href="https://github.com/dommangetnicolas/magic-commit">GitHub</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <span class="badge">Free &amp; open source · macOS 14+</span>
+      <h1>Commit messy. <span class="grad">Push clean.</span></h1>
+      <p class="lede">
+        A menu bar app that keeps an eye on your git projects and commits them with AI-written messages
+        from <a href="https://github.com/di-sukharev/opencommit">opencommit</a>, in one click.
+        Save your work with a quick <code>WIP</code>, and let Magic Commit rewrite every WIP into a real message before you push.
+      </p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/dommangetnicolas/magic-commit/releases/latest/download/MagicCommit.zip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          Download for macOS
+        </a>
+        <a class="btn" href="https://github.com/dommangetnicolas/magic-commit">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <p class="fine">Universal app for Apple silicon and Intel · MIT licensed</p>
+
+      <div class="shot hero-shot">
+        <img src="screenshots/panel.png" alt="The Magic Commit panel open under the menu bar, listing several git projects with their branch, changes and actions" onerror="this.remove()">
+        <div class="ph">Screenshot: the panel open under the menu bar<br>→ site/screenshots/panel.png</div>
+      </div>
+    </header>
+
+    <section id="features">
+      <h2>Everything a project needs, one row at a time</h2>
+      <p class="section-lede">
+        Each project shows its branch, changed files, WIP commits and ahead/behind counts, with only the actions that make sense right now.
+        The menu bar icon counts how many projects have something to commit or push.
+      </p>
+      <div class="features">
+        <article class="card">
+          <h3><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L19 7"/></svg></span>Commit</h3>
+          <p>Stages everything (unless you've already staged something) and runs <code>oco --yes</code> for a descriptive message.</p>
+          <div class="shot small">
+            <img src="screenshots/commit.png" alt="A project row with uncommitted changes and the Commit button" onerror="this.remove()">
+            <div class="ph">→ site/screenshots/commit.png</div>
+          </div>
+        </article>
+        <article class="card">
+          <h3><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span>WIP</h3>
+          <p>An instant commit with the message <code>WIP</code>, with no AI call. Save often, think later.</p>
+          <div class="shot small">
+            <img src="screenshots/wip.png" alt="A project row showing a count of WIP commits" onerror="this.remove()">
+            <div class="ph">→ site/screenshots/wip.png</div>
+          </div>
+        </article>
+        <article class="card">
+          <h3><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L16 8M14 6l4 4M19 3l.6 1.4L21 5l-1.4.6L19 7l-.6-1.4L17 5l1.4-.6z"/></svg></span>Batch oco</h3>
+          <p>Gives each unpushed WIP commit a real message generated from its own diff. Other commits keep their messages, empty WIPs are dropped, and author dates are kept.</p>
+          <div class="shot small">
+            <img src="screenshots/batch-oco.png" alt="The Batch oco button on a project with several WIP commits" onerror="this.remove()">
+            <div class="ph">→ site/screenshots/batch-oco.png</div>
+          </div>
+        </article>
+        <article class="card">
+          <h3><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>Push</h3>
+          <p>Runs <code>git push</code>, setting the upstream for new branches, and warns you first if WIP commits are still in there.</p>
+          <div class="shot small">
+            <img src="screenshots/push.png" alt="The warning shown when pushing with WIP commits" onerror="this.remove()">
+            <div class="ph">→ site/screenshots/push.png</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="safety">
+      <h2>Rewriting history, carefully</h2>
+      <p class="section-lede">Batch oco never touches your branch until it has proven the result is identical.</p>
+      <ol class="steps">
+        <li><strong>Replay in a worktree</strong>Commits from the oldest unpushed WIP up to <code>HEAD</code> are replayed in a temporary <code>git worktree</code>, away from your files.</li>
+        <li><strong>Rename only the WIPs</strong>Each WIP commit is re-staged and <code>oco --yes</code> writes its message. Every other commit is re-committed unchanged.</li>
+        <li><strong>Verify, then move</strong>The branch moves to the new history only if the final content is identical and <code>HEAD</code> hasn't moved in the meantime.</li>
+      </ol>
+    </section>
+
+    <section id="install">
+      <h2>Install in a minute</h2>
+      <p class="section-lede">Requires macOS 14 Sonoma or later and <a href="https://github.com/di-sukharev/opencommit">opencommit</a>. Magic Commit reads your <code>PATH</code> from your login shell, so <code>oco</code> from nvm or Homebrew is found.</p>
+      <div class="install">
+        <div class="card">
+          <h3>1. Set up opencommit</h3>
+          <pre><code>npm install -g opencommit
+oco config set OCO_API_KEY=&lt;your key&gt;</code></pre>
+        </div>
+        <div class="card">
+          <h3>2. Install the app</h3>
+          <ol>
+            <li><a href="https://github.com/dommangetnicolas/magic-commit/releases/latest/download/MagicCommit.zip">Download MagicCommit.zip</a>, unzip it and move <strong>Magic Commit.app</strong> to Applications.</li>
+            <li>The app isn't notarized yet, so right-click it and choose <strong>Open</strong> the first time, or run:
+              <pre><code>xattr -dr com.apple.quarantine "/Applications/Magic Commit.app"</code></pre>
+            </li>
+          </ol>
+        </div>
+      </div>
+      <p class="fine">Prefer building it yourself? See <a href="https://github.com/dommangetnicolas/magic-commit#build-from-source">Build from source</a>.</p>
+    </section>
+
+    <footer>
+      <span>Magic Commit · MIT License</span>
+      <span>
+        <a href="https://github.com/dommangetnicolas/magic-commit">GitHub</a> ·
+        <a href="https://github.com/dommangetnicolas/magic-commit/releases">Releases</a> ·
+        <a href="https://github.com/dommangetnicolas/magic-commit/issues">Issues</a>
+      </span>
+    </footer>
+  </div>
+</body>
+</html>
