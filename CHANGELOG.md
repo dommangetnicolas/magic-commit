@@ -10,6 +10,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 - Worktree support: linked worktrees of each project are discovered automatically and listed under it, each with its own status and Commit, WIP, Batch oco and Push buttons. Clean worktrees fold behind a toggle.
 - **Remove Worktree** in a worktree's menu, for clean worktrees (the branch is kept).
+- Claude Code as a message generator: pick **Claude Code** or **OpenCommit** from the ✨ menu in the panel's footer. Claude mode runs your local `claude` CLI (Haiku by default, override with the `claudeModel` default) and follows your repository's commit style.
+- `--generator claude|oco` option for the `batch-oco` command.
 
 ### Changed
 

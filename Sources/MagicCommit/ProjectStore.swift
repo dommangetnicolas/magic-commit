@@ -20,7 +20,7 @@ enum Activity: Equatable {
         case .pushing: return "Pushing…"
         case .removing: return "Removing worktree…"
         case let .batch(current, total):
-            return current == 0 ? "Preparing batch oco…" : "oco is renaming WIP \(current) of \(total)…"
+            return current == 0 ? "Preparing batch oco…" : "\(MessageGenerator.current.shortName) is renaming WIP \(current) of \(total)…"
         }
     }
 }

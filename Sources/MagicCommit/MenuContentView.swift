@@ -168,7 +168,7 @@ struct MenuContentView: View {
             .frame(width: 56, height: 56)
             VStack(spacing: 3) {
                 Text("No projects yet").font(.system(size: 13, weight: .semibold))
-                Text("Add git repositories to commit them with oco\nright from the menu bar.")
+                Text("Add git repositories to commit them with AI\nright from the menu bar.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -197,6 +197,7 @@ struct MenuContentView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             LaunchAtLoginToggle()
+            GeneratorPicker()
             Spacer()
             if let last = store.lastRefresh {
                 TimelineView(.periodic(from: .now, by: 15)) { _ in
@@ -216,6 +217,28 @@ struct MenuContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Message generator
+
+/// Picks the tool that writes commit messages (oco or the local Claude Code CLI).
+private struct GeneratorPicker: View {
+    @AppStorage(MessageGenerator.defaultsKey) private var generator: MessageGenerator = .oco
+
+    var body: some View {
+        Menu {
+            Picker("Commit messages by", selection: $generator) {
+                ForEach(MessageGenerator.allCases) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(generator.shortName, systemImage: "sparkles")
+                .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Tool that writes commit messages")
     }
 }
 
@@ -479,7 +502,7 @@ struct CheckoutRow: View {
                         Label("Commit", systemImage: "sparkles")
                     }
                     .buttonStyle(PillButtonStyle(fill: Theme.magic))
-                    .help("Stage all changes and commit with oco")
+                    .help("Stage all changes and commit with \(MessageGenerator.current.shortName)")
                 }
                 if status.wipCount > 0 {
                     Button {
@@ -488,7 +511,7 @@ struct CheckoutRow: View {
                         Label("Batch oco · \(status.wipCount)", systemImage: "wand.and.stars")
                     }
                     .buttonStyle(PillButtonStyle(fill: Theme.batch))
-                    .help("Rename \(status.wipCount) unpushed WIP commit\(status.wipCount == 1 ? "" : "s") with oco-generated messages")
+                    .help("Rename \(status.wipCount) unpushed WIP commit\(status.wipCount == 1 ? "" : "s") with \(MessageGenerator.current.shortName)-generated messages")
                 }
                 if status.canPush {
                     Button {

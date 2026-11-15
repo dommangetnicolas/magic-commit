@@ -1,7 +1,8 @@
 import Foundation
 
-/// Puts a fake `oco` (commits the staged changes with a fixed message) first on
-/// the PATH of every command the tests run.
+/// Puts a fake `oco` (commits the staged changes with a fixed message) and a fake
+/// `claude` (prints a fenced message, saving its stdin) first on the PATH of every
+/// command the tests run.
 ///
 /// `Shell.environment` reads MAGIC_COMMIT_EXTRA_PATH only once, when the first
 /// command runs, so every test class that runs commands calls `install()` in its
@@ -19,6 +20,13 @@ enum FakeOco {
         git commit -q -m "feat: generated message"
         """.write(to: oco, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: oco.path)
+        let claude = bin.appendingPathComponent("claude")
+        try? """
+        #!/bin/sh
+        cat > "$(git rev-parse --git-common-dir)/fake-claude-stdin"
+        printf '```\\nfeat: claude message\\n\\nBody line.\\n```\\n'
+        """.write(to: claude, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         setenv("MAGIC_COMMIT_EXTRA_PATH", bin.path, 1)
         precondition(FileManager.default.isExecutableFile(atPath: oco.path), "fake oco not installed")
         return bin

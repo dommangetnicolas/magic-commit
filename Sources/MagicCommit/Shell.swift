@@ -62,11 +62,12 @@ enum Shell {
         return path.isEmpty ? nil : path
     }
 
-    /// Runs `arguments` (resolved via PATH) in `directory`.
+    /// Runs `arguments` (resolved via PATH) in `directory`, feeding `input` to stdin if given.
     static func run(
         _ arguments: [String],
         in directory: String,
         extraEnvironment: [String: String] = [:],
+        input: String? = nil,
         timeout: TimeInterval? = nil
     ) async -> ShellResult {
         await withCheckedContinuation { continuation in
@@ -77,6 +78,7 @@ enum Shell {
                     arguments: arguments,
                     directory: directory,
                     environment: env,
+                    input: input,
                     timeout: timeout
                 )
                 continuation.resume(returning: result)
@@ -89,6 +91,7 @@ enum Shell {
         arguments: [String],
         directory: String?,
         environment: [String: String],
+        input: String? = nil,
         timeout: TimeInterval?
     ) -> ShellResult {
         let process = Process()
@@ -101,7 +104,8 @@ enum Shell {
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
+        let inPipe = input.map { _ in Pipe() }
+        process.standardInput = inPipe ?? FileHandle.nullDevice
 
         do {
             try process.run()
@@ -112,6 +116,15 @@ enum Shell {
         if let timeout {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 if process.isRunning { process.terminate() }
+            }
+        }
+
+        if let inPipe, let input {
+            // Written off-thread: a large input could fill the pipe before the child reads it.
+            DispatchQueue.global().async {
+                let handle = inPipe.fileHandleForWriting
+                try? handle.write(contentsOf: Data(input.utf8))
+                try? handle.close()
             }
         }
 
