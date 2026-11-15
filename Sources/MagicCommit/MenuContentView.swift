@@ -135,19 +135,26 @@ struct MenuContentView: View {
         if store.projects.isEmpty { return "Add a project to get started" }
         let n = store.attentionCount
         if n == 0 { return "All projects committed & pushed" }
-        return "\(n) project\(n == 1 ? "" : "s") need\(n == 1 ? "s" : "") attention"
+        let hasWorktrees = store.projects.contains { !store.linkedWorktrees(of: $0).isEmpty }
+        let noun = hasWorktrees ? "checkout" : "project"
+        return "\(n) \(noun)\(n == 1 ? "" : "s") need\(n == 1 ? "s" : "") attention"
     }
 
     @ViewBuilder
     private var content: some View {
         if store.projects.isEmpty {
             emptyState
-        } else if store.projects.count <= 6 {
+        } else if rowCount <= 6 {
             projectList
         } else {
             ScrollView { projectList }
                 .frame(height: 440)
         }
+    }
+
+    /// Number of rows shown (fold toggles are too small to count), to decide when the list should scroll.
+    private var rowCount: Int {
+        store.projects.reduce(0) { $0 + 1 + store.visibleWorktrees(of: $1).count }
     }
 
     private var emptyState: some View {
@@ -161,7 +168,7 @@ struct MenuContentView: View {
             .frame(width: 56, height: 56)
             VStack(spacing: 3) {
                 Text("No projects yet").font(.system(size: 13, weight: .semibold))
-                Text("Add git repositories to commit them with oco\nright from the menu bar.")
+                Text("Add git repositories to commit them with AI\nright from the menu bar.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -181,7 +188,7 @@ struct MenuContentView: View {
     private var projectList: some View {
         VStack(spacing: 2) {
             ForEach(store.projects) { project in
-                ProjectRow(project: project)
+                ProjectGroup(project: project)
             }
         }
         .padding(6)
@@ -190,6 +197,7 @@ struct MenuContentView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             LaunchAtLoginToggle()
+            GeneratorPicker()
             Spacer()
             if let last = store.lastRefresh {
                 TimelineView(.periodic(from: .now, by: 15)) { _ in
@@ -209,6 +217,28 @@ struct MenuContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Message generator
+
+/// Picks the tool that writes commit messages (oco or the local Claude Code CLI).
+private struct GeneratorPicker: View {
+    @AppStorage(MessageGenerator.defaultsKey) private var generator: MessageGenerator = .oco
+
+    var body: some View {
+        Menu {
+            Picker("Commit messages by", selection: $generator) {
+                ForEach(MessageGenerator.allCases) { Text($0.displayName).tag($0) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(generator.shortName, systemImage: "sparkles")
+                .font(.system(size: 11))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Tool that writes commit messages")
     }
 }
 
@@ -242,26 +272,81 @@ private struct PanelHeightSync: NSViewRepresentable {
     }
 }
 
-// MARK: - Row
+// MARK: - Project group
 
-struct ProjectRow: View {
+/// A repository's main checkout followed by its linked worktrees. Clean worktrees
+/// are folded behind a toggle unless the project is expanded.
+struct ProjectGroup: View {
     @EnvironmentObject private var store: ProjectStore
     let project: Project
+
+    var body: some View {
+        let linked = store.linkedWorktrees(of: project)
+        let isExpanded = store.expanded.contains(project.id)
+        let shown = store.visibleWorktrees(of: project)
+        let hidden = linked.count - shown.count
+
+        VStack(alignment: .leading, spacing: 2) {
+            CheckoutRow(project: project, checkout: store.mainCheckout(of: project))
+            ForEach(shown) { worktree in
+                CheckoutRow(project: project, checkout: worktree)
+                    .padding(.leading, 22)
+                    .overlay(alignment: .leading) { treeLine }
+            }
+            if hidden > 0 || (isExpanded && linked.contains { !store.isProminent($0) }) {
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { store.toggleExpanded(project) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                        Text(isExpanded
+                            ? "Hide clean worktrees"
+                            : "\(hidden) clean worktree\(hidden == 1 ? "" : "s")")
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 3)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 70)
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: linked)
+    }
+
+    private var treeLine: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.12))
+            .frame(width: 1.5)
+            .padding(.leading, 23)
+            .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Row
+
+/// One checkout: the project's main working tree (titled with the project name)
+/// or a linked worktree (titled with its branch).
+struct CheckoutRow: View {
+    @EnvironmentObject private var store: ProjectStore
+    let project: Project
+    let checkout: Worktree
     @State private var hovering = false
     @State private var showOutput = false
 
-    private var status: GitStatus? { store.statuses[project.id] }
-    private var activity: Activity? { store.activity[project.id] }
-    private var log: ActionLog? { store.logs[project.id] }
+    private var status: GitStatus? { store.statuses[checkout.path] }
+    private var activity: Activity? { store.activity[checkout.path] }
+    private var log: ActionLog? { store.logs[checkout.path] }
+    private var isWorktree: Bool { !checkout.isMain }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 statusIcon
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(project.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
+                    title
                     detailLine
                 }
                 Spacer(minLength: 6)
@@ -271,7 +356,7 @@ struct ProjectRow: View {
             if let log { logView(log) }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 8)
+        .padding(.vertical, isWorktree ? 6 : 8)
         .background(
             RoundedRectangle(cornerRadius: 9)
                 .fill(Color.primary.opacity(hovering ? 0.06 : 0))
@@ -285,34 +370,68 @@ struct ProjectRow: View {
         .contextMenu { menuItems }
     }
 
+    @ViewBuilder
+    private var title: some View {
+        HStack(spacing: 4) {
+            if isWorktree {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text(checkout.label)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(project.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            if checkout.isLocked {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .help(checkout.lockReason.flatMap { $0.isEmpty ? nil : "Locked: \($0)" } ?? "Locked worktree")
+            }
+        }
+        .help(checkout.path)
+    }
+
     // MARK: Status icon
 
     private var statusIcon: some View {
         let (symbol, tint): (String, Color) = {
+            if checkout.isBare { return ("shippingbox", .secondary) }
             guard let status else { return ("circle.dotted", .secondary) }
             if status.error != nil { return ("exclamationmark.triangle.fill", .red) }
             if status.hasChanges { return ("pencil", .orange) }
             if status.canPush { return ("arrow.up", .blue) }
             return ("checkmark", .green)
         }()
+        let size: CGFloat = isWorktree ? 24 : 30
         return ZStack {
             Circle().fill(tint.opacity(0.15))
             if activity != nil {
-                ProgressView().controlSize(.small).scaleEffect(0.8)
+                ProgressView().controlSize(.small).scaleEffect(isWorktree ? 0.65 : 0.8)
             } else {
                 Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: isWorktree ? 10 : 12, weight: .bold))
                     .foregroundStyle(tint)
             }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: size, height: size)
+        .frame(width: 30)
     }
 
     // MARK: Details
 
     @ViewBuilder
     private var detailLine: some View {
-        if let activity {
+        if checkout.isBare {
+            let n = store.linkedWorktrees(of: project).count
+            Text("Bare repository · \(n) worktree\(n == 1 ? "" : "s")")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        } else if let activity {
             Text(activity.label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -324,8 +443,14 @@ struct ProjectRow: View {
                     .lineLimit(1)
             } else {
                 HStack(spacing: 4) {
-                    Chip(text: status.branch ?? "detached", systemImage: "arrow.triangle.branch", truncates: true)
-                        .help(status.branch ?? "Detached HEAD")
+                    if isWorktree {
+                        // The branch is the title; show where the worktree lives instead.
+                        Chip(text: checkout.name, systemImage: "folder", truncates: true)
+                            .help(checkout.path)
+                    } else {
+                        Chip(text: status.branch ?? "detached", systemImage: "arrow.triangle.branch", truncates: true)
+                            .help(status.branch ?? "Detached HEAD")
+                    }
                     if status.changes > 0 {
                         Chip(text: "\(status.changes)", systemImage: "pencil", tint: .orange)
                             .help("\(status.changes) changed file\(status.changes == 1 ? "" : "s")")
@@ -354,7 +479,7 @@ struct ProjectRow: View {
     // MARK: Actions
 
     private var hasActions: Bool {
-        guard activity == nil, let status, status.error == nil else { return false }
+        guard !checkout.isBare, activity == nil, let status, status.error == nil else { return false }
         return status.hasChanges || status.canPush || status.wipCount > 0
     }
 
@@ -364,7 +489,7 @@ struct ProjectRow: View {
             HStack(spacing: 6) {
                 if status.hasChanges {
                     Button {
-                        store.commitWIP(project)
+                        store.commitWIP(checkout, in: project)
                     } label: {
                         Label("WIP", systemImage: "bolt.fill")
                     }
@@ -372,25 +497,25 @@ struct ProjectRow: View {
                     .help("Quick commit with a \"WIP\" message (rename later with Batch oco)")
 
                     Button {
-                        store.commit(project)
+                        store.commit(checkout, in: project)
                     } label: {
                         Label("Commit", systemImage: "sparkles")
                     }
                     .buttonStyle(PillButtonStyle(fill: Theme.magic))
-                    .help("Stage all changes and commit with oco")
+                    .help("Stage all changes and commit with \(MessageGenerator.current.shortName)")
                 }
                 if status.wipCount > 0 {
                     Button {
-                        store.batchOco(project)
+                        store.batchOco(checkout, in: project)
                     } label: {
                         Label("Batch oco · \(status.wipCount)", systemImage: "wand.and.stars")
                     }
                     .buttonStyle(PillButtonStyle(fill: Theme.batch))
-                    .help("Rename \(status.wipCount) unpushed WIP commit\(status.wipCount == 1 ? "" : "s") with oco-generated messages")
+                    .help("Rename \(status.wipCount) unpushed WIP commit\(status.wipCount == 1 ? "" : "s") with \(MessageGenerator.current.shortName)-generated messages")
                 }
                 if status.canPush {
                     Button {
-                        store.push(project)
+                        store.push(checkout, in: project)
                     } label: {
                         Label("Push", systemImage: "arrow.up")
                     }
@@ -420,11 +545,18 @@ struct ProjectRow: View {
 
     @ViewBuilder
     private var menuItems: some View {
-        Button("Open in Finder") { NSWorkspace.shared.open(project.url) }
-        Button("Open in Terminal") { openInTerminal() }
+        Button("Open in Finder") { NSWorkspace.shared.open(checkout.url) }
+        if !checkout.isBare {
+            Button("Open in Terminal") { openInTerminal() }
+        }
         Button("Refresh") { Task { await store.refresh(project) } }
         Divider()
-        Button("Remove Project", role: .destructive) { store.remove(project) }
+        if isWorktree {
+            Button("Remove Worktree…", role: .destructive) { store.removeWorktree(checkout, in: project) }
+                .disabled(!store.canRemove(checkout))
+        } else {
+            Button("Remove Project", role: .destructive) { store.remove(project) }
+        }
     }
 
     // MARK: Log
@@ -444,7 +576,7 @@ struct ProjectRow: View {
                         .buttonStyle(.link)
                 }
                 Button {
-                    store.dismissLog(project)
+                    store.dismissLog(checkout)
                     showOutput = false
                 } label: {
                     Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
@@ -475,7 +607,7 @@ struct ProjectRow: View {
 
     private func openInTerminal() {
         guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
-        NSWorkspace.shared.open([project.url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        NSWorkspace.shared.open([checkout.url], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
     }
 }
 

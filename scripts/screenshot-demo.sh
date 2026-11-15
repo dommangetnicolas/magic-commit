@@ -6,13 +6,15 @@
 #   ./scripts/screenshot-demo.sh setup     # build demo repos, back up and swap the project list
 #   ./scripts/screenshot-demo.sh restore   # put your project list back
 #   ./scripts/screenshot-demo.sh clean     # restore, then delete the demo repos
+#
+# APP=build/Magic\ Commit.app ./scripts/screenshot-demo.sh setup  runs a local build instead.
 set -euo pipefail
 
 DEMO_DIR="${DEMO_DIR:-$HOME/MagicCommitDemo}"
 REMOTES="$DEMO_DIR/.remotes"
 BACKUP="$DEMO_DIR/.projects-backup.plist"
 DOMAIN="local.magic-commit"
-APP="/Applications/Magic Commit.app"
+APP="${APP:-/Applications/Magic Commit.app}"
 
 say() { printf '\033[1;35m›\033[0m %s\n' "$*"; }
 
@@ -112,6 +114,28 @@ build_repos() {
   base_project docs-site "Docs"
 }
 
+# Linked worktrees, kept out of the project list: they show under their repository.
+build_worktrees() {
+  local wt="$DEMO_DIR/.worktrees"
+  [[ -d "$wt" ]] && return
+  mkdir -p "$wt"
+
+  # Uncommitted changes in a feature worktree: shown with Commit and WIP.
+  git -C "$DEMO_DIR/pocket-api" worktree add -q -b feature/billing "$wt/pocket-api-billing" main
+  printf '%s\n' "export const plans = ['free', 'pro'];" > "$wt/pocket-api-billing/src/plans.ts"
+  printf '%s\n' "export const app = \"Pocket API\"; export const billing = true;" > "$wt/pocket-api-billing/src/index.ts"
+
+  # A real commit waiting to be pushed: Push.
+  git -C "$DEMO_DIR/pocket-api" worktree add -q -b fix/rate-limit "$wt/pocket-api-hotfix" main
+  printf '%s\n' "export const limit = 100;" > "$wt/pocket-api-hotfix/src/limit.ts"
+  git -C "$wt/pocket-api-hotfix" add -A
+  git -C "$wt/pocket-api-hotfix" commit -q -m "Lower the rate limit to 100 requests per minute"
+
+  # Clean worktrees: folded behind the "clean worktrees" toggle.
+  git -C "$DEMO_DIR/pocket-api" worktree add -q --detach "$wt/pocket-api-review" main
+  git -C "$DEMO_DIR/docs-site" worktree add -q -b docs/getting-started "$wt/docs-site-guide" main
+}
+
 # --- project list swap ------------------------------------------------------
 
 swap_projects() {
@@ -159,6 +183,7 @@ case "${1:-}" in
       build_repos
       say "Created demo repos in $DEMO_DIR"
     fi
+    build_worktrees
     swap_projects
     launch_app
     say "Magic Commit now shows the demo projects. Run '$0 restore' when you're done."

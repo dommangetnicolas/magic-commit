@@ -6,6 +6,20 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
+### Added
+
+- Worktree support: linked worktrees of each project are discovered automatically and listed under it, each with its own status and Commit, WIP, Batch oco and Push buttons. Clean worktrees fold behind a toggle.
+- **Remove Worktree** in a worktree's menu, for clean worktrees (the branch is kept).
+- Claude Code as a message generator: pick **Claude Code** or **OpenCommit** from the ✨ menu in the panel's footer. Claude mode runs your local `claude` CLI (Haiku by default, override with the `claudeModel` default) and follows your repository's commit style.
+- `--generator claude|oco` option for the `batch-oco` command.
+
+### Changed
+
+- Adding a linked worktree's folder adds its main repository; projects saved as worktrees are migrated the same way.
+- Batch oco locks its temporary worktree, and temporary worktrees left behind by a crash are cleaned up on the next refresh.
+
 ## [1.0.0] - 2026-11-11
 
 ### Added
@@ -18,5 +32,6 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - `batch-oco` command-line mode.
 - Launch at login.
 
-[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/dommangetnicolas/magic-commit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dommangetnicolas/magic-commit/releases/tag/v1.0.0
