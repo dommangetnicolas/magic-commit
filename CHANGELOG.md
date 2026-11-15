@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-15
+
 ### Added
 
 - Worktree support: linked worktrees of each project are discovered automatically and listed under it, each with its own status and Commit, WIP, Batch oco and Push buttons. Clean worktrees fold behind a toggle.
@@ -30,5 +32,6 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - `batch-oco` command-line mode.
 - Launch at login.
 
-[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/dommangetnicolas/magic-commit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dommangetnicolas/magic-commit/releases/tag/v1.0.0
