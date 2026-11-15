@@ -8,21 +8,10 @@ final class BatchOcoTests: XCTestCase {
     private var repo: String { root.appendingPathComponent("repo").path }
 
     override func setUpWithError() throws {
+        FakeOco.install()
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("magic-commit-tests-\(UUID().uuidString)")
-        let bin = root.appendingPathComponent("bin")
-        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
-
-        let fakeOco = bin.appendingPathComponent("oco")
-        try """
-        #!/bin/sh
-        git commit -q -m "feat: generated message"
-        """.write(to: fakeOco, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeOco.path)
-
-        // Read once by `Shell.environment`, so it must be set before the first command runs.
-        setenv("MAGIC_COMMIT_EXTRA_PATH", bin.path, 1)
     }
 
     override func tearDownWithError() throws {
@@ -70,5 +59,33 @@ final class BatchOcoTests: XCTestCase {
         XCTAssertEqual(treeBefore, treeAfter)
         let worktrees = try await git("worktree", "list")
         XCTAssertEqual(worktrees.split(separator: "\n").count, 1, "temporary worktree should be removed")
+    }
+
+    func testRenamesWIPCommitsInLinkedWorktree() async throws {
+        try await git("init", "-q", "-b", "main")
+        try await git("config", "user.name", "Test")
+        try await git("config", "user.email", "test@example.com")
+        try write("a.txt", "a")
+        try await git("add", "-A")
+        try await git("commit", "-q", "-m", "Initial commit")
+
+        let linked = root.appendingPathComponent("repo-feature").path
+        try await git("worktree", "add", "-q", "-b", "feature", linked)
+        try "b".write(toFile: (linked as NSString).appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
+        let commitWIP = await Git.commitWIP(at: linked)
+        XCTAssertTrue(commitWIP.succeeded, commitWIP.combinedOutput)
+        let mainHead = try await git("rev-parse", "main")
+
+        let result = await Git.batchOco(at: linked, branch: "feature") { _, _ in }
+        XCTAssertTrue(result.succeeded, result.combinedOutput)
+
+        let subjects = try await git("log", "--format=%s", "feature")
+        XCTAssertEqual(subjects.split(separator: "\n"), ["feat: generated message", "Initial commit"])
+        let mainAfter = try await git("rev-parse", "main")
+        XCTAssertEqual(mainHead, mainAfter, "main must be untouched")
+        let status = await Git.status(at: linked)
+        XCTAssertFalse(status.hasChanges, "linked worktree's files and index stay in sync")
+        let worktrees = try await git("worktree", "list")
+        XCTAssertEqual(worktrees.split(separator: "\n").count, 2, "temporary worktree should be removed")
     }
 }

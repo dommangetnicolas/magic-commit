@@ -6,6 +6,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Worktree support: linked worktrees of each project are discovered automatically and listed under it, each with its own status and Commit, WIP, Batch oco and Push buttons. Clean worktrees fold behind a toggle.
+- **Remove Worktree** in a worktree's menu, for clean worktrees (the branch is kept).
+
+### Changed
+
+- Adding a linked worktree's folder adds its main repository; projects saved as worktrees are migrated the same way.
+- Batch oco locks its temporary worktree, and temporary worktrees left behind by a crash are cleaned up on the next refresh.
+
 ## [1.0.0] - 2026-11-11
 
 ### Added

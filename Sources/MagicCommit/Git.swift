@@ -1,5 +1,26 @@
 import Foundation
 
+/// One checkout of a repository: the main working tree or a linked worktree.
+struct Worktree: Identifiable, Hashable {
+    var path: String
+    /// Short branch name; nil when detached (or bare).
+    var branch: String?
+    var head: String?
+    var isMain = false
+    var isBare = false
+    var isDetached = false
+    /// Lock reason (possibly empty) when locked.
+    var lockReason: String?
+    var isPrunable = false
+
+    var id: String { path }
+    var name: String { URL(fileURLWithPath: path).lastPathComponent }
+    var url: URL { URL(fileURLWithPath: path) }
+    var isLocked: Bool { lockReason != nil }
+    /// Branch name, or the short commit for a detached worktree.
+    var label: String { branch ?? head.map { "detached @ \($0.prefix(7))" } ?? "detached" }
+}
+
 struct GitStatus: Equatable {
     var branch: String?
     var upstream: String?
@@ -24,6 +45,98 @@ enum Git {
         let top = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return top.isEmpty ? nil : top
     }
+
+    // MARK: Worktrees
+
+    /// Path of the repository's main working tree (or of the bare repository),
+    /// from any of its worktrees or subfolders. Nil when `path` isn't in a git repository.
+    static func mainWorktreePath(of path: String) async -> String? {
+        if let main = await worktrees(at: path)?.first { return main.path }
+        return await toplevel(of: path)
+    }
+
+    /// All worktrees of the repository containing `path`, the main one first.
+    static func worktrees(at path: String) async -> [Worktree]? {
+        let r = await Shell.run(["git", "worktree", "list", "--porcelain"], in: path)
+        guard r.succeeded else { return nil }
+        let list = parseWorktreeList(r.stdout)
+        return list.isEmpty ? nil : list
+    }
+
+    /// Parses `git worktree list --porcelain`: blocks of `worktree <path>`, `HEAD <sha>`,
+    /// `branch refs/heads/<name>`, `detached`, `bare`, `locked [reason]`, `prunable [reason]`.
+    static func parseWorktreeList(_ output: String) -> [Worktree] {
+        var result: [Worktree] = []
+        var current: Worktree?
+        func flush() {
+            if let w = current { result.append(w) }
+            current = nil
+        }
+        for raw in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(raw)
+            if line.isEmpty { flush(); continue }
+            let (key, value): (String, String) = {
+                guard let space = line.firstIndex(of: " ") else { return (line, "") }
+                return (String(line[..<space]), String(line[line.index(after: space)...]))
+            }()
+            if key == "worktree" {
+                flush()
+                current = Worktree(path: value, isMain: result.isEmpty)
+                continue
+            }
+            guard current != nil else { continue }
+            switch key {
+            case "HEAD": current?.head = value
+            case "branch":
+                current?.branch = value.hasPrefix("refs/heads/") ? String(value.dropFirst("refs/heads/".count)) : value
+            case "detached": current?.isDetached = true
+            case "bare": current?.isBare = true
+            case "locked": current?.lockReason = value
+            case "prunable": current?.isPrunable = true
+            default: break
+            }
+        }
+        flush()
+        return result
+    }
+
+    static var tempWorktreeLockReason: String { "magic-commit pid \(getpid())" }
+
+    /// Whether `worktree` is one of the temporary worktrees Batch oco creates.
+    static func isTempWorktree(_ worktree: Worktree, tempDirectory: URL = FileManager.default.temporaryDirectory) -> Bool {
+        let url = worktree.url
+        return !worktree.isMain && url.lastPathComponent.hasPrefix("magic-commit-")
+            && url.deletingLastPathComponent().resolvingSymlinksInPath().path
+            == tempDirectory.resolvingSymlinksInPath().path
+    }
+
+    /// PID recorded in a temporary worktree's lock reason.
+    static func tempWorktreePID(_ worktree: Worktree) -> pid_t? {
+        guard let reason = worktree.lockReason, reason.hasPrefix("magic-commit pid ") else { return nil }
+        return pid_t(reason.dropFirst("magic-commit pid ".count))
+    }
+
+    /// Removes temporary worktrees left behind by a Batch oco that never finished
+    /// (app crashed or was killed). Those whose process is still alive are kept.
+    static func removeStaleTempWorktrees(_ worktrees: [Worktree], repo: String) async {
+        for w in worktrees where isTempWorktree(w) {
+            if let pid = tempWorktreePID(w), kill(pid, 0) == 0 || errno == EPERM { continue }
+            let removed = await Shell.run(["git", "worktree", "remove", "--force", "--force", w.path], in: repo)
+            if !removed.succeeded {
+                // Folder already gone: drop the registration.
+                _ = await Shell.run(["git", "worktree", "unlock", w.path], in: repo)
+                _ = await Shell.run(["git", "worktree", "prune"], in: repo)
+            }
+        }
+    }
+
+    /// Deletes a linked worktree's folder. Git refuses if it has uncommitted changes.
+    /// Its branch and commits are kept.
+    static func removeWorktree(_ worktree: Worktree, repo: String) async -> ShellResult {
+        await Shell.run(["git", "worktree", "remove", worktree.path], in: repo)
+    }
+
+    // MARK: Status
 
     static func status(at path: String) async -> GitStatus {
         guard FileManager.default.fileExists(atPath: path) else {
@@ -191,7 +304,11 @@ enum Git {
 
         let worktree = FileManager.default.temporaryDirectory
             .appendingPathComponent("magic-commit-\(UUID().uuidString)").path
-        let add = await Shell.run(["git", "worktree", "add", "--detach", worktree, chain[0].parents[0]], in: path)
+        // Locked with our PID so a later run can tell a leftover (app crashed) from a batch in progress.
+        let add = await Shell.run(
+            ["git", "worktree", "add", "--detach", "--lock", "--reason", tempWorktreeLockReason, worktree, chain[0].parents[0]],
+            in: path
+        )
         guard add.succeeded else { return fail("Couldn't create a temporary worktree.", add) }
 
         let result = await replay(chain, in: worktree, progress: progress, fail: fail)
@@ -209,7 +326,8 @@ enum Git {
                 if !update.succeeded { outcome = fail("The branch changed while rewriting; nothing was changed.", update) }
             }
         }
-        _ = await Shell.run(["git", "worktree", "remove", "--force", worktree], in: path)
+        // Twice --force: the worktree is locked.
+        _ = await Shell.run(["git", "worktree", "remove", "--force", "--force", worktree], in: path)
         return outcome
     }
 
