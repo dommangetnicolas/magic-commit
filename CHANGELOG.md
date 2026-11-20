@@ -6,6 +6,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
 ### Added
 
 - OpenCode as a message generator: pick **OpenCode** from the ✨ menu in the panel's footer. It runs your local `opencode` CLI (your OpenCode default model, override with the `opencodeModel` default) with the same prompt as Claude Code.
@@ -37,6 +39,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - `batch-oco` command-line mode.
 - Launch at login.
 
-[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dommangetnicolas/magic-commit/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dommangetnicolas/magic-commit/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dommangetnicolas/magic-commit/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dommangetnicolas/magic-commit/releases/tag/v1.0.0
