@@ -14,42 +14,49 @@ Magic Commit follows [Semantic Versioning](https://semver.org/):
 The version is never written in the source. `scripts/build-app.sh` reads it from the tag
 (`v1.2.3` → `CFBundleShortVersionString` `1.2.3`) and uses the commit count as `CFBundleVersion`.
 
-## Checklist
+## Releasing from GitHub (recommended)
 
-1. **Make sure `main` is green.** CI must pass on the commit you're about to release.
+1. **Make sure `main` is green** and that **Unreleased** in [CHANGELOG.md](../CHANGELOG.md) lists
+   everything that ships.
 
-   ```bash
-   git switch main && git pull
-   swift test
-   ```
-
-2. **Update the changelog.** In [CHANGELOG.md](../CHANGELOG.md), move the entries under
-   **Unreleased** to a new heading such as `## [1.2.3] - YYYY-MM-DD`, and update the comparison
-   links at the bottom. Commit it:
+2. **Run "Prepare release".** In the Actions tab, open
+   [Prepare release](../.github/workflows/prepare-release.yml), click **Run workflow**, and pick
+   `patch`, `minor` or `major` (or type an exact version). From the terminal:
 
    ```bash
-   git commit -am "Release 1.2.3"
-   git push
+   gh workflow run prepare-release.yml -f bump=minor
    ```
 
-3. **Tag and push.**
+   It moves the Unreleased entries under `## [1.2.3] - YYYY-MM-DD`, updates the comparison links,
+   and opens a **Release 1.2.3** pull request from `release/v1.2.3`.
 
-   ```bash
-   git tag -a v1.2.3 -m "Magic Commit 1.2.3"
-   git push origin v1.2.3
-   ```
-
-4. **Watch the workflow.** The [Release workflow](../.github/workflows/release.yml) runs the tests,
-   builds a universal (Apple silicon + Intel) app, and creates a GitHub release with
-   `MagicCommit.zip` attached and notes generated from the merged pull requests.
+3. **Merge the pull request.** The [Release workflow](../.github/workflows/release.yml) then runs
+   the tests, builds a universal (Apple silicon + Intel) app, tags the merge commit `v1.2.3`, and
+   creates a GitHub release with `MagicCommit.zip` attached and the changelog section as notes.
 
    ```bash
    gh run watch
    ```
 
-5. **Check the release.** Open the release page, download `MagicCommit.zip`, and confirm that the
-   app launches and that Finder's **Get Info** shows the right version. Edit the release notes if needed. The
-   changelog section for this version is usually the best summary.
+4. **Check the release.** Download `MagicCommit.zip` from the release page and confirm that the app
+   launches and that Finder's **Get Info** shows the right version.
+
+"Prepare release" needs **Settings → Actions → General → Allow GitHub Actions to create and approve
+pull requests** to be enabled.
+
+## Releasing by hand
+
+Pushing a tag still works and runs the same Release workflow:
+
+```bash
+scripts/changelog.sh release 1.2.3   # update CHANGELOG.md
+git switch -c release/v1.2.3 && git commit -am "Release 1.2.3"
+# open and merge the pull request, then on the merged main:
+git tag -a v1.2.3 -m "Magic Commit 1.2.3"
+git push origin v1.2.3
+```
+
+Don't push the tag for a `release/v*` pull request you merged: merging it already publishes.
 
 ## Building a release locally
 
@@ -63,7 +70,8 @@ This writes `build/Magic Commit.app` and `build/MagicCommit.zip`.
 
 ## If something goes wrong
 
-If the workflow fails before the release is created, fix the problem on `main`, then move the tag:
+If the workflow fails before the release is created, fix the problem on `main`, then tag the fixed
+commit (or move the tag if it was already pushed) to rerun it:
 
 ```bash
 git tag -d v1.2.3

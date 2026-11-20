@@ -1,0 +1,79 @@
+name: Prepare release
+
+# Run from the Actions tab. Opens a "Release X.Y.Z" pull request that moves the
+# Unreleased changelog entries under a new version. Merging it publishes the
+# release (see release.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: minor
+      version:
+        description: Exact version instead (e.g. 1.2.3), optional
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Pick version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXACT: ${{ inputs.version }}
+        run: |
+          version="${EXACT#v}"
+          if [[ -z "$version" ]]; then version="$(scripts/changelog.sh next "$BUMP")"; fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version: $version"; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "::error::Tag v$version already exists"; exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Update changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          scripts/changelog.sh release "$VERSION"
+          scripts/changelog.sh notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+
+      - name: Open release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Release $VERSION"
+          git push --force origin "$branch"
+
+          {
+            echo "Merging this pull request tags \`v$VERSION\` and publishes the GitHub release."
+            echo
+            echo "## Changes"
+            echo
+            cat "$RUNNER_TEMP/notes.md"
+          } > "$RUNNER_TEMP/body.md"
+
+          gh pr create --base main --head "$branch" \
+            --title "Release $VERSION" --body-file "$RUNNER_TEMP/body.md"

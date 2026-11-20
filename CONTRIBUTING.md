@@ -32,6 +32,7 @@ MAGIC_COMMIT_EXTRA_PATH=/path/to/folder swift run
 | `Sources/MagicCommit/MenuContentView.swift` | The SwiftUI menu bar panel |
 | `Sources/MagicCommit/CLI.swift` | Headless `batch-oco` command |
 | `scripts/build-app.sh` | Builds the `.app` bundle |
+| `scripts/changelog.sh` | Bumps the version and updates `CHANGELOG.md` for releases |
 
 ## Pull requests
 
