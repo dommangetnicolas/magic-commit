@@ -124,6 +124,36 @@ final class BatchOcoTests: XCTestCase {
         XCTAssertEqual(subject, "feat: claude message")
     }
 
+    func testOpenCodeGeneratorCommitsLastMessageAndKeepsAuthor() async throws {
+        try await git("init", "-q", "-b", "main")
+        try await git("config", "user.name", "Test")
+        try await git("config", "user.email", "test@example.com")
+        try write("a.txt", "a")
+        try await git("add", "-A")
+        try await git("commit", "-q", "-m", "Initial commit")
+
+        try write("b.txt", "hello from b")
+        try await git("add", "-A")
+        try await git("commit", "-q", "-m", "WIP", "--author", "Someone Else <else@example.com>")
+
+        let result = await Git.batchOco(at: repo, branch: "main", generator: .opencode) { _, _ in }
+        XCTAssertTrue(result.succeeded, result.combinedOutput)
+
+        let message = try await git("log", "-1", "--format=%B")
+        XCTAssertEqual(message, "feat: opencode message\n\nBody line.")
+        let author = try await git("log", "-1", "--format=%an <%ae>")
+        XCTAssertEqual(author, "Someone Else <else@example.com>")
+        let stdin = try String(contentsOfFile: "\(repo)/.git/fake-opencode-stdin", encoding: .utf8)
+        XCTAssertTrue(stdin.contains("+hello from b"), "opencode should receive the WIP commit's diff")
+        XCTAssertTrue(stdin.contains("- Initial commit"), "opencode should see recent subjects")
+    }
+
+    func testOpenCodeTextReportsErrors() {
+        let output = #"{"type":"error","error":{"type":"unknown","message":"No provider"}}"#
+        XCTAssertEqual(MessageGenerator.opencodeText(output).error, "No provider")
+        XCTAssertEqual(MessageGenerator.opencodeText("not json\n").text, "")
+    }
+
     func testCleanMessage() {
         XCTAssertEqual(MessageGenerator.cleanMessage("```\nfix: x\n```"), "fix: x\n")
         XCTAssertEqual(MessageGenerator.cleanMessage("  \"fix: y\"  \n"), "fix: y\n")

@@ -222,7 +222,7 @@ struct MenuContentView: View {
 
 // MARK: - Message generator
 
-/// Picks the tool that writes commit messages (oco or the local Claude Code CLI).
+/// Picks the tool that writes commit messages (oco, or the local Claude Code or OpenCode CLI).
 private struct GeneratorPicker: View {
     @AppStorage(MessageGenerator.defaultsKey) private var generator: MessageGenerator = .oco
 

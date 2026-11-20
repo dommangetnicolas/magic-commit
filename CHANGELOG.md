@@ -6,6 +6,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- OpenCode as a message generator: pick **OpenCode** from the ✨ menu in the panel's footer. It runs your local `opencode` CLI (your OpenCode default model, override with the `opencodeModel` default) with the same prompt as Claude Code.
+- `--generator opencode` option for the `batch-oco` command.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added

@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Website](https://img.shields.io/badge/website-magic--commit.nicolas--dmg.fr-6d4aff)](https://magic-commit.nicolas-dmg.fr/)
 
-A macOS menu bar app that keeps an eye on your git projects and commits them with AI-written messages, in one click. Messages come from your local [Claude Code](https://claude.com/claude-code) CLI (`claude`) or from [opencommit](https://github.com/di-sukharev/opencommit) (`oco`): pick one from the ✨ menu at the bottom of the panel.
+A macOS menu bar app that keeps an eye on your git projects and commits them with AI-written messages, in one click. Messages come from your local [Claude Code](https://claude.com/claude-code) CLI (`claude`), your local [OpenCode](https://opencode.ai) CLI (`opencode`), or from [opencommit](https://github.com/di-sukharev/opencommit) (`oco`): pick one from the ✨ menu at the bottom of the panel.
 
 Commit as often as you like with a quick `WIP`, then let Magic Commit turn every WIP commit into a real, descriptive message before you push.
 
@@ -33,6 +33,12 @@ The menu bar icon shows how many checkouts (projects and worktrees) have somethi
 
     ```bash
     defaults write io.github.dommangetnicolas.MagicCommit claudeModel sonnet
+    ```
+
+  - **OpenCode**: the [`opencode` CLI](https://opencode.ai), with a provider connected once by running `opencode auth login` in a terminal. Magic Commit sends the same input to `opencode run` (your OpenCode default model, in an archived session; permission requests are rejected) and commits the final reply. To pick a model (`provider/model`):
+
+    ```bash
+    defaults write io.github.dommangetnicolas.MagicCommit opencodeModel anthropic/claude-haiku-4-5
     ```
 
   - **opencommit**: installed and configured:
@@ -83,14 +89,14 @@ Batch oco can also run without the UI:
 "/Applications/Magic Commit.app/Contents/MacOS/MagicCommit" batch-oco ~/path/to/repo --generator claude
 ```
 
-`--generator` is `claude` or `oco`; without it, the generator picked in the menu is used.
+`--generator` is `claude`, `opencode` or `oco`; without it, the generator picked in the menu is used.
 
 ## How Batch oco works
 
 Rewriting history is risky, so Batch oco is careful:
 
 1. It takes the commits from the oldest unpushed WIP commit up to `HEAD` and replays them in a temporary `git worktree`.
-2. Each WIP commit is re-staged there and the generator (`claude` or `oco`) writes its message. Other commits are re-committed unchanged.
+2. Each WIP commit is re-staged there and the generator (`claude`, `opencode` or `oco`) writes its message. Other commits are re-committed unchanged.
 3. The branch is moved to the rewritten history only if the final content is identical and `HEAD` hasn't moved in the meantime.
 
 Your working tree and staged changes are never touched. If the generator fails partway through, nothing changes. Commits that are already pushed are never rewritten, and merge commits stop the operation.

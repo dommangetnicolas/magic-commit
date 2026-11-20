@@ -1,9 +1,11 @@
 import Foundation
 
-/// The tool that writes commit messages: OpenCommit (`oco`) or the local Claude Code CLI (`claude`).
+/// The tool that writes commit messages: OpenCommit (`oco`), or the local Claude Code (`claude`)
+/// or OpenCode (`opencode`) CLI.
 enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
     case oco
     case claude
+    case opencode
 
     static let defaultsKey = "messageGenerator"
 
@@ -19,6 +21,7 @@ enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .oco: return "OpenCommit (oco)"
         case .claude: return "Claude Code (claude)"
+        case .opencode: return "OpenCode (opencode)"
         }
     }
 
@@ -35,7 +38,31 @@ enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
             let env = extraEnvironment.merging(["OCO_GITPUSH": "false"]) { _, new in new }
             return Self.explainMissing(await Shell.run(["oco", "--yes"], in: path, extraEnvironment: env, timeout: 300), tool: "oco")
         case .claude:
-            return await Self.claudeCommit(at: path, extraEnvironment: extraEnvironment)
+            return await Self.llmCommit(at: path, tool: "claude", extraEnvironment: extraEnvironment) { input in
+                let generated = await Shell.run(
+                    ["claude", "-p", Self.prompt,
+                     "--model", Self.claudeModel,
+                     "--tools", "",
+                     "--no-session-persistence",
+                     "--output-format", "text"],
+                    in: path,
+                    input: input,
+                    timeout: 300
+                )
+                return (generated, generated.stdout)
+            }
+        case .opencode:
+            return await Self.llmCommit(at: path, tool: "opencode", extraEnvironment: extraEnvironment) { input in
+                var arguments = ["opencode", "run", "--format", "json", "--archived", "--title", "Magic Commit"]
+                if let model = Self.opencodeModel { arguments += ["--model", model] }
+                arguments.append(Self.prompt)
+                let generated = await Shell.run(arguments, in: path, input: input, timeout: 300)
+                let parsed = Self.opencodeText(generated.stdout)
+                if let error = parsed.error, generated.status != 127 {
+                    return (ShellResult(status: 1, stdout: "", stderr: "opencode failed: \(error)\n\(generated.stderr)"), "")
+                }
+                return (generated, parsed.text)
+            }
         }
     }
 
@@ -51,7 +78,50 @@ enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
     /// Diffs longer than this are cut (the `--stat` summary above it still lists every file).
     static let maxDiffCharacters = 120_000
 
-    private static func claudeCommit(at path: String, extraEnvironment: [String: String]) async -> ShellResult {
+    // MARK: OpenCode
+
+    /// Model passed to `opencode run --model` (`provider/model`); OpenCode's own default when unset. Set with
+    /// `defaults write io.github.dommangetnicolas.MagicCommit opencodeModel anthropic/claude-haiku-4-5`.
+    static var opencodeModel: String? {
+        let value = UserDefaults.standard.string(forKey: "opencodeModel")?.trimmingCharacters(in: .whitespaces) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    /// The final answer from `opencode run --format json` output (one JSON event per line):
+    /// the text parts of the last assistant message, so text written around tool calls is skipped.
+    /// `error` is set when the run reported an `error` event.
+    static func opencodeText(_ output: String) -> (text: String, error: String?) {
+        var order: [String] = []
+        var texts: [String: String] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            guard let data = line.data(using: .utf8),
+                  let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let type = event["type"] as? String
+            else { continue }
+            if type == "error" {
+                let error = event["error"] as? [String: Any]
+                return ("", (error?["message"] as? String) ?? "unknown error")
+            }
+            guard type == "text", let part = event["part"] as? [String: Any],
+                  let text = part["text"] as? String
+            else { continue }
+            let message = part["messageID"] as? String ?? ""
+            if texts[message] == nil { order.append(message) }
+            texts[message, default: ""] += text
+        }
+        return (order.last.flatMap { texts[$0] } ?? "", nil)
+    }
+
+    // MARK: Shared by Claude and OpenCode
+
+    /// Sends the staged diff and recent commit subjects to `generate` (which runs `tool` and returns its
+    /// result plus the message text), then commits the cleaned message.
+    private static func llmCommit(
+        at path: String,
+        tool: String,
+        extraEnvironment: [String: String],
+        generate: (_ input: String) async -> (result: ShellResult, text: String)
+    ) async -> ShellResult {
         let stat = await Shell.run(["git", "diff", "--cached", "--no-color", "--stat"], in: path)
         guard stat.succeeded else { return stat }
         guard !stat.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -77,19 +147,10 @@ enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
         \(diff)
         """
 
-        let generated = await Shell.run(
-            ["claude", "-p", prompt,
-             "--model", claudeModel,
-             "--tools", "",
-             "--no-session-persistence",
-             "--output-format", "text"],
-            in: path,
-            input: input,
-            timeout: 300
-        )
-        guard generated.succeeded else { return explainMissing(generated, tool: "claude") }
-        guard let message = cleanMessage(generated.stdout) else {
-            return ShellResult(status: 1, stdout: "", stderr: "claude returned an empty commit message.\n\n\(generated.combinedOutput)")
+        let (generated, text) = await generate(input)
+        guard generated.succeeded else { return explainMissing(generated, tool: tool) }
+        guard let message = cleanMessage(text) else {
+            return ShellResult(status: 1, stdout: "", stderr: "\(tool) returned an empty commit message.\n\n\(generated.combinedOutput)")
         }
         return await Shell.run(["git", "commit", "-F", "-"], in: path, extraEnvironment: extraEnvironment, input: message, timeout: 300)
     }
@@ -123,9 +184,12 @@ enum MessageGenerator: String, CaseIterable, Identifiable, Sendable {
     /// `/usr/bin/env` exits with 127 when the tool isn't on the PATH.
     private static func explainMissing(_ result: ShellResult, tool: String) -> ShellResult {
         guard result.status == 127 else { return result }
-        let hint = tool == "claude"
-            ? "Install Claude Code (https://claude.com/claude-code) and sign in once with `claude` in a terminal."
-            : "Install OpenCommit with `npm install -g opencommit`, or switch to Claude Code in the menu."
+        let hint: String
+        switch tool {
+        case "claude": hint = "Install Claude Code (https://claude.com/claude-code) and sign in once with `claude` in a terminal."
+        case "opencode": hint = "Install OpenCode (https://opencode.ai) and connect a provider once with `opencode auth login` in a terminal."
+        default: hint = "Install OpenCommit with `npm install -g opencommit`, or switch to Claude Code or OpenCode in the menu."
+        }
         return ShellResult(status: 127, stdout: "", stderr: "`\(tool)` wasn't found on your PATH. \(hint)")
     }
 }

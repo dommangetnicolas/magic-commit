@@ -1,7 +1,7 @@
 import Foundation
 
 /// Headless commands, e.g.
-///   "Magic Commit.app/Contents/MacOS/MagicCommit" batch-oco /path/to/repo [--generator oco|claude]
+///   "Magic Commit.app/Contents/MacOS/MagicCommit" batch-oco /path/to/repo [--generator oco|claude|opencode]
 enum CLI {
     static func runIfRequested() {
         let args = CommandLine.arguments
