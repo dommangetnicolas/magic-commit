@@ -1,8 +1,9 @@
 name: Prepare release
 
-# Run from the Actions tab. Opens a "Release X.Y.Z" pull request that moves the
-# Unreleased changelog entries under a new version. Merging it publishes the
-# release (see release.yml).
+# Run from the Actions tab. Pushes a "release/vX.Y.Z" branch that moves the
+# Unreleased changelog entries under a new version, and links to a prefilled
+# pull request in the run summary. You open the pull request yourself, so CI
+# runs on it. Merging it publishes the release (see release.yml).
 
 on:
   workflow_dispatch:
@@ -18,7 +19,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: prepare-release
@@ -55,9 +55,8 @@ jobs:
           scripts/changelog.sh release "$VERSION"
           scripts/changelog.sh notes "$VERSION" > "$RUNNER_TEMP/notes.md"
 
-      - name: Open release pull request
+      - name: Push release branch
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           branch="release/v$VERSION"
@@ -75,5 +74,13 @@ jobs:
             cat "$RUNNER_TEMP/notes.md"
           } > "$RUNNER_TEMP/body.md"
 
-          gh pr create --base main --head "$branch" \
-            --title "Release $VERSION" --body-file "$RUNNER_TEMP/body.md"
+          uri() { jq -rn --arg s "$1" '$s|@uri'; }
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
+          url+="&title=$(uri "Release $VERSION")&body=$(uri "$(cat "$RUNNER_TEMP/body.md")")"
+
+          echo "::notice title=Open the release pull request::$url"
+          {
+            echo "## Release $VERSION is ready"
+            echo
+            echo "**[Open the release pull request]($url)**, then merge it to publish."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -28,9 +28,17 @@ The version is never written in the source. `scripts/build-app.sh` reads it from
    ```
 
    It moves the Unreleased entries under `## [1.2.3] - YYYY-MM-DD`, updates the comparison links,
-   and opens a **Release 1.2.3** pull request from `release/v1.2.3`.
+   and pushes a `release/v1.2.3` branch.
 
-3. **Merge the pull request.** The [Release workflow](../.github/workflows/release.yml) then runs
+3. **Open the pull request.** The run's summary page has an **Open the release pull request** link
+   with the title and changelog already filled in. You open it yourself (rather than the workflow)
+   so that CI runs on it, and so Actions never needs permission to create pull requests.
+
+   ```bash
+   gh pr create --head release/v1.2.3 --fill
+   ```
+
+4. **Merge the pull request.** The [Release workflow](../.github/workflows/release.yml) then runs
    the tests, builds a universal (Apple silicon + Intel) app, tags the merge commit `v1.2.3`, and
    creates a GitHub release with `MagicCommit.zip` attached and the changelog section as notes.
 
@@ -38,11 +46,8 @@ The version is never written in the source. `scripts/build-app.sh` reads it from
    gh run watch
    ```
 
-4. **Check the release.** Download `MagicCommit.zip` from the release page and confirm that the app
+5. **Check the release.** Download `MagicCommit.zip` from the release page and confirm that the app
    launches and that Finder's **Get Info** shows the right version.
-
-"Prepare release" needs **Settings → Actions → General → Allow GitHub Actions to create and approve
-pull requests** to be enabled.
 
 ## Releasing by hand
 
